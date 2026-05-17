@@ -15,6 +15,16 @@ const ACCESS_TOKEN_TTL_SECONDS = 60 * 60;
 const REFRESH_TOKEN_TTL_SECONDS = 30 * 24 * 60 * 60;
 const AUTH_CODE_TTL_SECONDS = 10 * 60;
 const registeredClientsCache = new Map<string, OAuthClientInformationFull>();
+const pendingAuthorizationCache = new Map<string, {
+    clientId: string;
+    redirectUri: string;
+    codeChallenge: string;
+    scopes: string[];
+    state?: string;
+    resource?: string;
+    createdAt: number;
+    email?: string;
+}>();
 
 export interface PersonalOAuthProviderOptions {
     authBaseUrl: URL;
@@ -139,7 +149,7 @@ export class PersonalOAuthProvider implements OAuthServerProvider {
         pendingPath.searchParams.set("request_id", requestId);
 
         await updateSecretState((state) => {
-            state.oauth.pending[requestId] = {
+            const pending = {
                 clientId: client.client_id,
                 redirectUri: params.redirectUri,
                 codeChallenge: params.codeChallenge,
@@ -149,6 +159,8 @@ export class PersonalOAuthProvider implements OAuthServerProvider {
                 createdAt: Date.now(),
                 email: this.allowedUserEmail,
             };
+            state.oauth.pending[requestId] = pending;
+            pendingAuthorizationCache.set(requestId, pending);
         });
 
         secureRedirect(pendingPath, res);
@@ -343,13 +355,26 @@ export class PersonalOAuthProvider implements OAuthServerProvider {
         const state = await loadSecretState();
         let pending = state.oauth.pending[requestId];
         if (!pending) {
+            pending = pendingAuthorizationCache.get(requestId);
+        }
+        if (!pending) {
             const pendingEntries = Object.entries(state.oauth.pending);
             pending = pendingEntries.find(([, record]) => record.email?.toLowerCase() === email.toLowerCase())?.[1];
+        }
+        if (!pending) {
+            const cacheEntries = Array.from(pendingAuthorizationCache.values());
+            pending = cacheEntries.find((record) => record.email?.toLowerCase() === email.toLowerCase());
         }
         if (!pending) {
             const pendingEntries = Object.values(state.oauth.pending);
             if (pendingEntries.length === 1) {
                 pending = pendingEntries[0];
+            }
+        }
+        if (!pending) {
+            const cacheEntries = Array.from(pendingAuthorizationCache.values());
+            if (cacheEntries.length === 1) {
+                pending = cacheEntries[0];
             }
         }
 
@@ -375,6 +400,7 @@ export class PersonalOAuthProvider implements OAuthServerProvider {
             };
             delete next.oauth.pending[requestId];
         });
+        pendingAuthorizationCache.delete(requestId);
 
         const redirectUrl = new URL(pending.redirectUri);
         redirectUrl.searchParams.set("code", code);
