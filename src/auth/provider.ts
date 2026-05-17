@@ -31,6 +31,10 @@ function isHttpsOrLocalhost(url: URL): boolean {
     return url.protocol === "https:" || ["localhost", "127.0.0.1", "[::1]"].includes(url.hostname);
 }
 
+function parseRedirectUri(value: string | URL): URL {
+    return value instanceof URL ? value : new URL(value);
+}
+
 function secureRedirect(target: URL, res: Response): void {
     res.setHeader("Cache-Control", "no-store");
     res.redirect(302, target.toString());
@@ -68,7 +72,9 @@ export class PersonalOAuthProvider implements OAuthServerProvider {
             return state.oauth.clients[clientId];
         },
         registerClient: async (client: any) => {
-            const redirectUris = client.redirect_uris ?? [];
+            const redirectUris = (client.redirect_uris ?? []).map((redirectUri: string | URL) =>
+                parseRedirectUri(redirectUri),
+            );
             if (redirectUris.length === 0) {
                 throw new Error("At least one redirect_uri is required.");
             }

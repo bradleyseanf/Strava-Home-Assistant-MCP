@@ -98,3 +98,41 @@ describe("encrypted secret store", () => {
         );
     });
 });
+
+describe("oauth client registration", () => {
+    it("accepts string redirect URIs from the MCP registration flow", async () => {
+        const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "strava-mcp-oauth-"));
+        const secretPath = path.join(tempDir, "secrets.enc.json");
+
+        await withEnv(
+            {
+                MCP_SECRET_PATH: secretPath,
+                TOKEN_ENCRYPTION_KEY: "test-encryption-key",
+                SESSION_SECRET: "test-session-secret",
+                NODE_ENV: "production",
+            },
+            async () => {
+                const { PersonalOAuthProvider } = await import("../src/auth/provider.js");
+                const provider = new PersonalOAuthProvider({
+                    authBaseUrl: new URL("https://example.com/auth"),
+                    resourceServerUrl: new URL("https://example.com/mcp"),
+                    allowedUserEmail: "user@example.com",
+                    sessionSecret: "test-session-secret",
+                    nodeEnv: "production",
+                });
+
+                const client = await provider.clientsStore.registerClient({
+                    redirect_uris: ["https://chatgpt.com/aip/test/oauth/callback"],
+                    token_endpoint_auth_method: "none",
+                    grant_types: ["authorization_code"],
+                    response_types: ["code"],
+                    client_name: "ChatGPT",
+                    scope: "mcp:tools",
+                });
+
+                expect(client.client_id).toBeTruthy();
+                expect(client.redirect_uris[0].toString()).toBe("https://chatgpt.com/aip/test/oauth/callback");
+            },
+        );
+    });
+});
