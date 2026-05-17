@@ -14,6 +14,7 @@ import { loadSecretState, updateSecretState } from "../secretStore.js";
 const ACCESS_TOKEN_TTL_SECONDS = 60 * 60;
 const REFRESH_TOKEN_TTL_SECONDS = 30 * 24 * 60 * 60;
 const AUTH_CODE_TTL_SECONDS = 10 * 60;
+const registeredClientsCache = new Map<string, OAuthClientInformationFull>();
 
 export interface PersonalOAuthProviderOptions {
     authBaseUrl: URL;
@@ -68,8 +69,16 @@ export class PersonalOAuthProvider implements OAuthServerProvider {
 
     private readonly clientsStoreImpl: OAuthRegisteredClientsStore = {
         getClient: async (clientId: string) => {
+            const cachedClient = registeredClientsCache.get(clientId);
+            if (cachedClient) {
+                return cachedClient;
+            }
             const state = await loadSecretState();
-            return state.oauth.clients[clientId];
+            const storedClient = state.oauth.clients[clientId];
+            if (storedClient) {
+                registeredClientsCache.set(clientId, storedClient);
+            }
+            return storedClient;
         },
         registerClient: async (client: any) => {
             const redirectUris = (client.redirect_uris ?? []).map((redirectUri: string | URL) =>
@@ -96,6 +105,7 @@ export class PersonalOAuthProvider implements OAuthServerProvider {
             await updateSecretState((state) => {
                 state.oauth.clients[clientId] = clientRecord;
             });
+            registeredClientsCache.set(clientId, clientRecord);
 
             return clientRecord;
         },
