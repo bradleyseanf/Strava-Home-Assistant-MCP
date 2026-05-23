@@ -8,6 +8,7 @@ import { rateLimit } from "express-rate-limit";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
+import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
 import { mcpAuthRouter, getOAuthProtectedResourceMetadataUrl } from "@modelcontextprotocol/sdk/server/auth/router.js";
 import { requireBearerAuth } from "@modelcontextprotocol/sdk/server/auth/middleware/bearerAuth.js";
 import { loadConfig, saveConfig } from "./config.js";
@@ -127,6 +128,10 @@ async function persistBootstrapConfig(config: Awaited<ReturnType<typeof loadRunt
 
 function routePath(basePath: string, suffix: string): string {
     const cleanBase = basePath.replace(/\/+$/, "");
+    if (!suffix) {
+        return cleanBase || "/";
+    }
+
     const cleanSuffix = suffix.startsWith("/") ? suffix : `/${suffix}`;
     return `${cleanBase}${cleanSuffix}` || cleanSuffix;
 }
@@ -180,11 +185,16 @@ async function startRemoteServer(
     const loginPath = routePath(authPath, "/login");
     const healthPath = routePath(runtime.publicBasePath, "/health");
     const mcpPath = routePath(runtime.publicBasePath, "/mcp");
+    const rootMcpPath = routePath(runtime.publicBasePath, "");
+    const ssePath = routePath(runtime.publicBasePath, "/sse");
+    const mcpSsePath = routePath(mcpPath, "/sse");
+    const messagesPath = routePath(runtime.publicBasePath, "/messages");
+    const mcpMessagesPath = routePath(mcpPath, "/messages");
     const authRouterOptions = {
         provider,
         issuerUrl: runtime.authBaseUrl!,
         baseUrl: runtime.authBaseUrl!,
-        resourceServerUrl: runtime.mcpUrl!,
+        resourceServerUrl: runtime.publicBaseUrl!,
         resourceName: "Strava Coach",
         serviceDocumentationUrl: runtime.publicBaseUrl,
         scopesSupported: MCP_SCOPES,
@@ -193,6 +203,7 @@ async function startRemoteServer(
     const authTokenPath = routePath(runtime.publicBasePath, "/auth/token");
     const rootAuthMountPath = routePath(runtime.publicBasePath, "");
     const authMountPath = routePath(runtime.publicBasePath, "/auth");
+    const resourceMetadataUrl = getOAuthProtectedResourceMetadataUrl(runtime.publicBaseUrl!);
 
     app.set("trust proxy", 1);
     app.use(helmet({ contentSecurityPolicy: false }));
@@ -277,30 +288,84 @@ async function startRemoteServer(
         }
     });
 
+    const handleMcpRequest: RequestHandler = async (req, res) => {
+        const transport = new StreamableHTTPServerTransport({
+            sessionIdGenerator: undefined,
+        });
+        const mcpServer = buildMcpServer(version, false);
+        const cleanup = () => {
+            void transport.close();
+            void mcpServer.close();
+        };
+
+        try {
+            res.on("close", cleanup);
+            await mcpServer.connect(transport);
+            await transport.handleRequest(req, res, req.body);
+        } catch (error) {
+            console.error("MCP request failed.");
+            if (!res.headersSent) {
+                res.status(500).json({
+                    jsonrpc: "2.0",
+                    error: {
+                        code: -32603,
+                        message: "Internal server error",
+                    },
+                    id: null,
+                });
+            }
+            cleanup();
+        }
+    };
+
     app.all(
-        mcpPath,
+        rootMcpPath,
         MCP_RATE_LIMIT,
         requireBearerAuth({
             verifier: provider,
             requiredScopes: MCP_SCOPES,
-            resourceMetadataUrl: getOAuthProtectedResourceMetadataUrl(runtime.mcpUrl!),
+            resourceMetadataUrl,
         }),
-        async (req, res) => {
-            const transport = new StreamableHTTPServerTransport({
-                sessionIdGenerator: undefined,
-            });
+        handleMcpRequest,
+    );
+
+    if (mcpPath !== rootMcpPath) {
+        app.all(
+            mcpPath,
+            MCP_RATE_LIMIT,
+            requireBearerAuth({
+                verifier: provider,
+                requiredScopes: MCP_SCOPES,
+                resourceMetadataUrl,
+            }),
+            handleMcpRequest,
+        );
+    }
+
+    const sseTransports = new Map<string, SSEServerTransport>();
+    const createSseRequestHandler = (endpointPath: string): RequestHandler => {
+        return async (_req, res) => {
+            const transport = new SSEServerTransport(endpointPath, res);
+            const sessionId = transport.sessionId;
             const mcpServer = buildMcpServer(version, false);
+            let cleanedUp = false;
+
             const cleanup = () => {
+                if (cleanedUp) {
+                    return;
+                }
+                cleanedUp = true;
+                sseTransports.delete(sessionId);
                 void transport.close();
                 void mcpServer.close();
             };
 
             try {
+                sseTransports.set(sessionId, transport);
                 res.on("close", cleanup);
                 await mcpServer.connect(transport);
-                await transport.handleRequest(req, res, req.body);
             } catch (error) {
-                console.error("MCP request failed.");
+                console.error("SSE MCP request failed.");
                 if (!res.headersSent) {
                     res.status(500).json({
                         jsonrpc: "2.0",
@@ -312,10 +377,56 @@ async function startRemoteServer(
                     });
                 }
                 cleanup();
+            }
+        };
+    };
+
+    const handleSsePost: RequestHandler = async (req, res) => {
+        try {
+            const sessionId = typeof req.query.sessionId === "string" ? req.query.sessionId : "";
+            if (!sessionId) {
+                res.status(400).send("Missing sessionId parameter");
                 return;
             }
-        },
-    );
+
+            const transport = sseTransports.get(sessionId);
+            if (!transport) {
+                res.status(404).send("Session not found");
+                return;
+            }
+
+            await transport.handlePostMessage(req, res, req.body);
+        } catch (error) {
+            console.error("SSE message handling failed.");
+            if (!res.headersSent) {
+                res.status(500).json({
+                    jsonrpc: "2.0",
+                    error: {
+                        code: -32603,
+                        message: "Internal server error",
+                    },
+                    id: null,
+                });
+            }
+        }
+    };
+
+    const sseAuthMiddleware = requireBearerAuth({
+        verifier: provider,
+        requiredScopes: MCP_SCOPES,
+        resourceMetadataUrl,
+    });
+
+    app.get(ssePath, MCP_RATE_LIMIT, sseAuthMiddleware, createSseRequestHandler(messagesPath));
+    app.post(messagesPath, MCP_RATE_LIMIT, sseAuthMiddleware, handleSsePost);
+
+    if (mcpSsePath !== ssePath) {
+        app.get(mcpSsePath, MCP_RATE_LIMIT, sseAuthMiddleware, createSseRequestHandler(mcpMessagesPath));
+    }
+
+    if (mcpMessagesPath !== messagesPath) {
+        app.post(mcpMessagesPath, MCP_RATE_LIMIT, sseAuthMiddleware, handleSsePost);
+    }
 
     const port = Number(process.env.PORT ?? 3000);
     await new Promise<void>((resolve, reject) => {
