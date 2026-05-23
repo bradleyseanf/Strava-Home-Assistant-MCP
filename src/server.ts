@@ -180,25 +180,34 @@ async function startRemoteServer(
     const loginPath = routePath(authPath, "/login");
     const healthPath = routePath(runtime.publicBasePath, "/health");
     const mcpPath = routePath(runtime.publicBasePath, "/mcp");
+    const authRouterOptions = {
+        provider,
+        issuerUrl: runtime.authBaseUrl!,
+        baseUrl: runtime.authBaseUrl!,
+        resourceServerUrl: runtime.mcpUrl!,
+        resourceName: "Strava Coach",
+        serviceDocumentationUrl: runtime.publicBaseUrl,
+        scopesSupported: MCP_SCOPES,
+    };
+    const rootTokenPath = routePath(runtime.publicBasePath, "/token");
+    const authTokenPath = routePath(runtime.publicBasePath, "/auth/token");
+    const rootAuthMountPath = routePath(runtime.publicBasePath, "");
+    const authMountPath = routePath(runtime.publicBasePath, "/auth");
 
     app.set("trust proxy", 1);
     app.use(helmet({ contentSecurityPolicy: false }));
     app.use(express.json({ limit: "1mb" }));
     app.use(express.urlencoded({ extended: false, limit: "16kb" }));
     app.use(cookieParser());
-    app.use("/token", attachBasicClientCredentials);
+    app.use(rootTokenPath, attachBasicClientCredentials);
+    if (authTokenPath !== rootTokenPath) {
+        app.use(authTokenPath, attachBasicClientCredentials);
+    }
 
-    app.use(
-        mcpAuthRouter({
-            provider,
-            issuerUrl: runtime.authBaseUrl!,
-            baseUrl: runtime.authBaseUrl!,
-            resourceServerUrl: runtime.mcpUrl!,
-            resourceName: "Strava Coach",
-            serviceDocumentationUrl: runtime.publicBaseUrl,
-            scopesSupported: MCP_SCOPES,
-        }),
-    );
+    app.use(rootAuthMountPath, mcpAuthRouter(authRouterOptions));
+    if (authMountPath !== rootAuthMountPath) {
+        app.use(authMountPath, mcpAuthRouter(authRouterOptions));
+    }
 
     app.get(healthPath, (_req, res) => {
         res.setHeader("Cache-Control", "no-store");
