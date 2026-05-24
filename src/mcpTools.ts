@@ -90,15 +90,19 @@ function normalizeToolResult(toolName: string, result: any): any {
 }
 
 function registerTool(server: McpServer, tool: ToolDefinition): void {
-    const inputSchema = tool.inputSchema?.shape;
-    const registerToolFn = server.registerTool as any;
+    const inputSchema = tool.inputSchema?.shape as any;
+    const config: any = {
+        description: tool.description,
+        outputSchema: GenericToolOutputSchema,
+    };
+    if (inputSchema) {
+        config.inputSchema = inputSchema;
+    }
+
+    const registerToolFn = server.registerTool.bind(server) as any;
     registerToolFn(
         tool.name,
-        {
-            description: tool.description,
-            inputSchema: inputSchema ?? {},
-            outputSchema: GenericToolOutputSchema,
-        },
+        config,
         async (args: any, extra: any) => normalizeToolResult(tool.name, await tool.execute(args, extra)),
     );
 }

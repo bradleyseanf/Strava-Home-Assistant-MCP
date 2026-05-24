@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
+import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 
 import { registerStravaTools } from "../src/mcpTools.ts";
 
@@ -21,5 +22,11 @@ describe("registerStravaTools", () => {
             expect(registration.config.outputSchema.isError).toBeDefined();
             expect(registration.config.outputSchema.contentCount).toBeDefined();
         }
+    });
+
+    it("registers against a real McpServer without throwing", () => {
+        const server = new McpServer({ name: "test", version: "1.0.0" });
+
+        expect(() => registerStravaTools(server)).not.toThrow();
     });
 });
