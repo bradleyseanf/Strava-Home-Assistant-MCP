@@ -39,7 +39,7 @@ async function loadEnv(): Promise<{ clientId?: string; clientSecret?: string }> 
   }
 }
 
-async function updateEnvFile(tokens: { accessToken: string; refreshToken: string }): Promise<void> {
+async function updateEnvFile(tokens: { refreshToken: string }): Promise<void> {
   let envContent = '';
   try {
     envContent = await fs.readFile(envPath, 'utf-8');
@@ -49,24 +49,20 @@ async function updateEnvFile(tokens: { accessToken: string; refreshToken: string
 
   const lines = envContent.split('\n');
   const newLines: string[] = [];
-  let accessTokenUpdated = false;
   let refreshTokenUpdated = false;
 
   for (const line of lines) {
-    if (line.startsWith('STRAVA_ACCESS_TOKEN=')) {
-      newLines.push(`STRAVA_ACCESS_TOKEN=${tokens.accessToken}`);
-      accessTokenUpdated = true;
-    } else if (line.startsWith('STRAVA_REFRESH_TOKEN=')) {
+    if (line.startsWith('STRAVA_REFRESH_TOKEN=')) {
       newLines.push(`STRAVA_REFRESH_TOKEN=${tokens.refreshToken}`);
       refreshTokenUpdated = true;
+    } else if (line.startsWith('STRAVA_ACCESS_TOKEN=')) {
+      // Do not persist the short-lived access token in .env.
+      continue;
     } else if (line.trim() !== '') {
       newLines.push(line);
     }
   }
 
-  if (!accessTokenUpdated) {
-    newLines.push(`STRAVA_ACCESS_TOKEN=${tokens.accessToken}`);
-  }
   if (!refreshTokenUpdated) {
     newLines.push(`STRAVA_REFRESH_TOKEN=${tokens.refreshToken}`);
   }
@@ -140,10 +136,10 @@ async function main() {
     console.log(`Access Token Expires At: ${new Date(expires_at * 1000).toLocaleString()}`);
 
 
-    const save = await promptUser('\nDo you want to save these tokens to your .env file? (yes/no): ');
+    const save = await promptUser('\nDo you want to save the refresh token to your .env file? (yes/no): ');
 
     if (save.toLowerCase() === 'yes' || save.toLowerCase() === 'y') {
-        await updateEnvFile({ accessToken: access_token, refreshToken: refresh_token });
+        await updateEnvFile({ refreshToken: refresh_token });
         // Optionally save client_id and client_secret if they weren't in .env initially
         let envContent = '';
         try {
@@ -171,7 +167,7 @@ async function main() {
         }
 
     } else {
-        console.log('\nTokens not saved. Please store them securely yourself.');
+        console.log('\nRefresh token not saved. Please store it securely yourself.');
     }
 
   } catch (error: any) {

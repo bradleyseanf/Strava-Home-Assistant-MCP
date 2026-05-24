@@ -15,6 +15,7 @@ import { loadConfig, saveConfig } from "./config.js";
 import { registerStravaTools } from "./mcpTools.js";
 import { loadRuntimeConfig, assertHttpsPublicUrl } from "./runtime.js";
 import { PersonalOAuthProvider } from "./auth/provider.js";
+import { refreshAccessToken } from "./stravaClient.js";
 import type { PendingAuthorizationContext } from "./auth/provider.js";
 import {
     chatgptLoginErrorPage,
@@ -106,6 +107,27 @@ function applyBootstrappedStravaEnv(config: Awaited<ReturnType<typeof loadConfig
     }
     if (config.refreshToken) {
         process.env.STRAVA_REFRESH_TOKEN = config.refreshToken;
+    }
+}
+
+async function ensureFreshStravaAccessToken(): Promise<void> {
+    const config = await loadConfig();
+    const tokenIsStale = !config.accessToken || !config.expiresAt || config.expiresAt <= Date.now() + 60_000;
+
+    if (!tokenIsStale) {
+        return;
+    }
+
+    if (!config.refreshToken || !config.clientId || !config.clientSecret) {
+        return;
+    }
+
+    try {
+        await refreshAccessToken();
+    } catch (error) {
+        console.error(
+            `Unable to refresh Strava access token at startup: ${error instanceof Error ? error.message : String(error)}`,
+        );
     }
 }
 
@@ -483,10 +505,11 @@ async function main(): Promise<void> {
                 throw new Error("ALLOWED_USER_EMAIL is required for remote mode.");
             }
             await persistBootstrapConfig(runtime);
-            const storedConfig = await loadConfig();
-            applyBootstrappedStravaEnv(storedConfig);
+            await ensureFreshStravaAccessToken();
+            const refreshedConfig = await loadConfig();
+            applyBootstrappedStravaEnv(refreshedConfig);
 
-            if (!storedConfig.accessToken || !storedConfig.refreshToken) {
+            if (!refreshedConfig.accessToken || !refreshedConfig.refreshToken) {
                 console.error("Warning: no Strava access/refresh tokens are configured yet. Bootstrap them before using the MCP tools.");
             }
 

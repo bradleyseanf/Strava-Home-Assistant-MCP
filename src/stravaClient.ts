@@ -318,6 +318,8 @@ const RouteSchema = z.object({
 });
 export type StravaRoute = z.infer<typeof RouteSchema>;
 const StravaRoutesResponseSchema = z.array(RouteSchema);
+const ATHLETE_CACHE_TTL_MS = 5 * 60 * 1000;
+const athleteCache = new Map<string, { athlete: StravaAthlete; cachedAt: number }>();
 
 // --- Token Refresh Functionality ---
 import { loadConfig, updateTokens } from './config.js';
@@ -326,7 +328,7 @@ import { loadConfig, updateTokens } from './config.js';
  * Refreshes the Strava API access token using the refresh token
  * @returns The new access token
  */
-async function refreshAccessToken(): Promise<string> {
+export async function refreshAccessToken(): Promise<string> {
     // Load config from all sources (env vars, config file, .env)
     const config = await loadConfig();
     
@@ -389,6 +391,26 @@ function formatRateLimitDetails(headers: unknown): string {
     return parts.length > 0 ? ` [${parts.join(", ")}]` : "";
 }
 
+const RETRY_REFRESH_COOLDOWN_MS = 5_000;
+const recentRefreshAttempts = new Map<string, number>();
+
+function shouldAttemptTokenRefresh(context: string): boolean {
+    const now = Date.now();
+    for (const [key, timestamp] of recentRefreshAttempts.entries()) {
+        if (now - timestamp > 60_000) {
+            recentRefreshAttempts.delete(key);
+        }
+    }
+
+    const lastAttempt = recentRefreshAttempts.get(context);
+    if (lastAttempt !== undefined && now - lastAttempt < RETRY_REFRESH_COOLDOWN_MS) {
+        return false;
+    }
+
+    recentRefreshAttempts.set(context, now);
+    return true;
+}
+
 /**
  * Helper function to handle API errors with token refresh capability
  * @param error - The caught error
@@ -401,13 +423,17 @@ export async function handleApiError<T>(error: unknown, context: string, retryFn
 
     // Check if it's an authentication error (401) that might be fixed by refreshing the token
     if (axios.isAxiosError(error) && error.response?.status === 401 && retryFn) {
-        try {
-            await refreshAccessToken();
-            return await retryFn();
-        } catch (refreshError) {
-            console.error(`Token refresh failed in ${context}.`);
-            refreshFailureMessage = refreshError instanceof Error ? refreshError.message : String(refreshError);
-            // Fall through to normal error handling if refresh fails
+        if (shouldAttemptTokenRefresh(context)) {
+            try {
+                await refreshAccessToken();
+                return await retryFn();
+            } catch (refreshError) {
+                console.error(`Token refresh failed in ${context}.`);
+                refreshFailureMessage = refreshError instanceof Error ? refreshError.message : String(refreshError);
+                // Fall through to normal error handling if refresh fails
+            }
+        } else {
+            console.error(`Skipping repeated token refresh in ${context}.`);
         }
     }
 
@@ -434,6 +460,10 @@ export async function handleApiError<T>(error: unknown, context: string, retryFn
         const message = (typeof responseData === 'object' && responseData !== null && 'message' in responseData && typeof responseData.message === 'string')
             ? responseData.message
             : error.message;
+        if (error.response?.status === 401) {
+            const refreshSuffix = refreshFailureMessage ? ` Refresh attempt failed: ${refreshFailureMessage}.` : "";
+            throw new Error(`STRAVA_REAUTH_REQUIRED: ${message}${refreshSuffix}`);
+        }
         console.error(`Strava API request failed in ${context} with status ${status}.`);
         const refreshSuffix = status === 401 && refreshFailureMessage
             ? ` Token refresh failed: ${refreshFailureMessage}`
@@ -551,6 +581,11 @@ export async function getAuthenticatedAthlete(accessToken: string): Promise<Stra
         throw new Error("Strava access token is required.");
     }
 
+    const cachedAthlete = athleteCache.get(accessToken);
+    if (cachedAthlete && Date.now() - cachedAthlete.cachedAt < ATHLETE_CACHE_TTL_MS) {
+        return cachedAthlete.athlete;
+    }
+
     try {
         const response = await stravaApi.get<unknown>("athlete", {
             headers: { Authorization: `Bearer ${accessToken}` }
@@ -564,6 +599,10 @@ export async function getAuthenticatedAthlete(accessToken: string): Promise<Stra
             throw new Error(`Invalid data format received from Strava API: ${validationResult.error.message}`);
         }
         // Type assertion is safe here due to successful validation
+        athleteCache.set(accessToken, {
+            athlete: validationResult.data,
+            cachedAt: Date.now(),
+        });
         return validationResult.data;
 
     } catch (error) {

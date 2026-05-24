@@ -1,7 +1,6 @@
 // import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js"; // Removed
 import { z } from "zod";
 import {
-    getAuthenticatedAthlete,
     exploreSegments as fetchExploreSegments, // Renamed import
     StravaExplorerResponse
 } from "../stravaClient.js";
@@ -45,7 +44,6 @@ export const exploreSegments = {
 
         try {
             console.error(`Exploring segments within bounds: ${bounds}...`);
-            const athlete = await getAuthenticatedAthlete(token);
             const response: StravaExplorerResponse = await fetchExploreSegments(token, bounds, activityType, minCat, maxCat);
             console.error(`Found ${response.segments?.length ?? 0} segments.`);
 
@@ -53,20 +51,15 @@ export const exploreSegments = {
                 return { content: [{ type: "text" as const, text: " MNo segments found in the specified area with the given filters." }] };
             }
 
-            const distanceFactor = athlete.measurement_preference === 'feet' ? 0.000621371 : 0.001;
-            const distanceUnit = athlete.measurement_preference === 'feet' ? 'mi' : 'km';
-            const elevationFactor = athlete.measurement_preference === 'feet' ? 3.28084 : 1;
-            const elevationUnit = athlete.measurement_preference === 'feet' ? 'ft' : 'm';
-
             const segmentItems = response.segments.map(segment => {
-                const distance = (segment.distance * distanceFactor).toFixed(2);
-                const elevDifference = (segment.elev_difference * elevationFactor).toFixed(0);
+                const distance = (segment.distance / 1000).toFixed(2);
+                const elevDifference = segment.elev_difference.toFixed(0);
                 const text = `
 🗺️ **${segment.name}** (ID: ${segment.id})
    - Climb: Cat ${segment.climb_category_desc} (${segment.climb_category})
-   - Distance: ${distance} ${distanceUnit}
+   - Distance: ${distance} km
    - Avg Grade: ${segment.avg_grade}%
-   - Elev Difference: ${elevDifference} ${elevationUnit}
+   - Elev Difference: ${elevDifference} m
    - Starred: ${segment.starred ? 'Yes' : 'No'}
                 `.trim();
                 const item: { type: "text", text: string } = { type: "text" as const, text };
