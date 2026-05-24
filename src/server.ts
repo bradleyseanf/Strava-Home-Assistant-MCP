@@ -95,16 +95,16 @@ function buildMcpServer(version: string, includeAdminTools: boolean): McpServer 
 }
 
 function applyBootstrappedStravaEnv(config: Awaited<ReturnType<typeof loadConfig>>): void {
-    if (config.clientId && !process.env.STRAVA_CLIENT_ID) {
+    if (config.clientId) {
         process.env.STRAVA_CLIENT_ID = config.clientId;
     }
-    if (config.clientSecret && !process.env.STRAVA_CLIENT_SECRET) {
+    if (config.clientSecret) {
         process.env.STRAVA_CLIENT_SECRET = config.clientSecret;
     }
-    if (config.accessToken && !process.env.STRAVA_ACCESS_TOKEN) {
+    if (config.accessToken) {
         process.env.STRAVA_ACCESS_TOKEN = config.accessToken;
     }
-    if (config.refreshToken && !process.env.STRAVA_REFRESH_TOKEN) {
+    if (config.refreshToken) {
         process.env.STRAVA_REFRESH_TOKEN = config.refreshToken;
     }
 }

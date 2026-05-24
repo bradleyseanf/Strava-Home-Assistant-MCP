@@ -23,10 +23,10 @@ function mergeConfig(
     env: ReturnType<typeof loadRuntimeConfig>,
 ): StravaConfig {
     return {
-        clientId: normalizeOptionalString(env.stravaClientId) ?? stored.clientId,
-        clientSecret: normalizeOptionalString(env.stravaClientSecret) ?? stored.clientSecret,
-        accessToken: normalizeOptionalString(env.stravaAccessToken) ?? stored.accessToken,
-        refreshToken: normalizeOptionalString(env.stravaRefreshToken) ?? stored.refreshToken,
+        clientId: stored.clientId ?? normalizeOptionalString(env.stravaClientId),
+        clientSecret: stored.clientSecret ?? normalizeOptionalString(env.stravaClientSecret),
+        accessToken: stored.accessToken ?? normalizeOptionalString(env.stravaAccessToken),
+        refreshToken: stored.refreshToken ?? normalizeOptionalString(env.stravaRefreshToken),
         expiresAt: stored.expiresAt,
     };
 }

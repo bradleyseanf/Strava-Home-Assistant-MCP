@@ -365,6 +365,30 @@ async function refreshAccessToken(): Promise<string> {
     }
 }
 
+function formatRateLimitDetails(headers: unknown): string {
+    if (!headers || typeof headers !== "object") {
+        return "";
+    }
+
+    const record = headers as Record<string, unknown>;
+    const parts: string[] = [];
+    const rateLimit = record["x-ratelimit-limit"];
+    const rateUsage = record["x-ratelimit-usage"];
+    const retryAfter = record["retry-after"];
+
+    if (rateLimit !== undefined) {
+        parts.push(`X-RateLimit-Limit=${String(rateLimit)}`);
+    }
+    if (rateUsage !== undefined) {
+        parts.push(`X-RateLimit-Usage=${String(rateUsage)}`);
+    }
+    if (retryAfter !== undefined) {
+        parts.push(`Retry-After=${String(retryAfter)}`);
+    }
+
+    return parts.length > 0 ? ` [${parts.join(", ")}]` : "";
+}
+
 /**
  * Helper function to handle API errors with token refresh capability
  * @param error - The caught error
@@ -373,6 +397,8 @@ async function refreshAccessToken(): Promise<string> {
  * @returns Never returns normally, always throws an error or returns via retryFn
  */
 export async function handleApiError<T>(error: unknown, context: string, retryFn?: () => Promise<T>): Promise<T> {
+    let refreshFailureMessage: string | undefined;
+
     // Check if it's an authentication error (401) that might be fixed by refreshing the token
     if (axios.isAxiosError(error) && error.response?.status === 401 && retryFn) {
         try {
@@ -380,8 +406,18 @@ export async function handleApiError<T>(error: unknown, context: string, retryFn
             return await retryFn();
         } catch (refreshError) {
             console.error(`Token refresh failed in ${context}.`);
+            refreshFailureMessage = refreshError instanceof Error ? refreshError.message : String(refreshError);
             // Fall through to normal error handling if refresh fails
         }
+    }
+
+    if (axios.isAxiosError(error) && error.response?.status === 429) {
+        const responseData = error.response?.data;
+        const message = (typeof responseData === "object" && responseData !== null && "message" in responseData && typeof responseData.message === "string")
+            ? responseData.message
+            : error.message;
+        console.error(`Strava API rate limit exceeded in ${context}.`);
+        throw new Error(`Strava API Error in ${context} (429): ${message}${formatRateLimitDetails(error.response?.headers)}`);
     }
 
     // Check for subscription error (402)
@@ -399,7 +435,10 @@ export async function handleApiError<T>(error: unknown, context: string, retryFn
             ? responseData.message
             : error.message;
         console.error(`Strava API request failed in ${context} with status ${status}.`);
-        throw new Error(`Strava API Error in ${context} (${status}): ${message}`);
+        const refreshSuffix = status === 401 && refreshFailureMessage
+            ? ` Token refresh failed: ${refreshFailureMessage}`
+            : "";
+        throw new Error(`Strava API Error in ${context} (${status}): ${message}${refreshSuffix}`);
     } else if (error instanceof Error) {
         console.error(`Unexpected error in ${context}.`);
         throw new Error(`An unexpected error occurred in ${context}: ${error.message}`);

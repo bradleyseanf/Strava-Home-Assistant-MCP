@@ -130,6 +130,39 @@ describe("encrypted secret store", () => {
             },
         );
     });
+
+    it("prefers stored Strava credentials over stale env values", async () => {
+        const tempDir = await fs.mkdtemp(path.join(os.tmpdir(), "strava-mcp-secrets-stale-env-"));
+        const secretPath = path.join(tempDir, "secrets.enc.json");
+
+        await withEnv(
+            {
+                MCP_SECRET_PATH: secretPath,
+                TOKEN_ENCRYPTION_KEY: "test-encryption-key",
+                SESSION_SECRET: "test-session-secret",
+                NODE_ENV: "development",
+                STRAVA_ACCESS_TOKEN: "stale-access-token",
+                STRAVA_REFRESH_TOKEN: "stale-refresh-token",
+                STRAVA_CLIENT_ID: "stale-client-id",
+                STRAVA_CLIENT_SECRET: "stale-client-secret",
+            },
+            async () => {
+                const { saveConfig, loadConfig } = await import("../src/config.js");
+                await saveConfig({
+                    clientId: "stored-client-id",
+                    clientSecret: "stored-client-secret",
+                    accessToken: "stored-access-token",
+                    refreshToken: "stored-refresh-token",
+                });
+
+                const stored = await loadConfig();
+                expect(stored.clientId).toBe("stored-client-id");
+                expect(stored.clientSecret).toBe("stored-client-secret");
+                expect(stored.accessToken).toBe("stored-access-token");
+                expect(stored.refreshToken).toBe("stored-refresh-token");
+            },
+        );
+    });
 });
 
 describe("oauth client registration", () => {

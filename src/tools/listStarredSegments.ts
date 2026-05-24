@@ -1,5 +1,4 @@
-// import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js"; // Removed
-import { getAuthenticatedAthlete, listStarredSegments as fetchSegments } from "../stravaClient.js"; // Renamed import
+import { listStarredSegments as fetchSegments } from "../stravaClient.js";
 
 // Export the tool definition directly
 export const listStarredSegments = {
@@ -20,27 +19,21 @@ export const listStarredSegments = {
 
         try {
             console.error("Fetching starred segments...");
-            // Need athlete measurement preference for formatting distance
-            const athlete = await getAuthenticatedAthlete(token);
-            // Use renamed import
             const segments = await fetchSegments(token);
             console.error(`Successfully fetched ${segments?.length ?? 0} starred segments.`);
 
             if (!segments || segments.length === 0) {
-                return { content: [{ type: "text" as const, text: " MNo starred segments found." }] };
+                return { content: [{ type: "text" as const, text: "No starred segments found." }] };
             }
-
-            const distanceFactor = athlete.measurement_preference === 'feet' ? 0.000621371 : 0.001;
-            const distanceUnit = athlete.measurement_preference === 'feet' ? 'mi' : 'km';
 
             // Format the segments into a text response
             const segmentText = segments.map(segment => {
                 const location = [segment.city, segment.state, segment.country].filter(Boolean).join(", ") || 'N/A';
-                const distance = (segment.distance * distanceFactor).toFixed(2);
+                const distance = (segment.distance / 1000).toFixed(2);
                 return `
 ⭐ **${segment.name}** (ID: ${segment.id})
    - Activity Type: ${segment.activity_type}
-   - Distance: ${distance} ${distanceUnit}
+   - Distance: ${distance} km
    - Avg Grade: ${segment.average_grade}%
    - Location: ${location}
    - Private: ${segment.private ? 'Yes' : 'No'}
