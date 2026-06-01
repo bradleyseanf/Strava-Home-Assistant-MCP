@@ -1,6 +1,6 @@
-# Troubleshooting JSONRPC Error After Package Name Change
+# Troubleshooting MCP Connection Issues
 
-If you're getting `JSONRPC.ProtocolTransportError fout 3` after updating to `@r-huijts/strava-mcp-server`, try these steps:
+If ChatGPT or another MCP client is failing to connect after updating this fork, try these steps:
 
 ## Step 1: Clear npx Cache
 
@@ -10,9 +10,9 @@ The old package might be cached. Clear it:
 rm -rf ~/.npm/_npx
 ```
 
-## Step 2: Verify Your Claude Desktop Config
+## Step 2: Verify Your MCP Client Config
 
-Make sure your `~/Library/Application Support/Claude/claude_desktop_config.json` has:
+Make sure your MCP client is pointed at the current package name:
 
 ```json
 {
@@ -25,11 +25,11 @@ Make sure your `~/Library/Application Support/Claude/claude_desktop_config.json`
 }
 ```
 
-**Important:** Remove any old references to `strava-mcp-server` (without the `@r-huijts/` prefix).
+**Important:** Remove any old references to `strava-mcp-server` or `@bradleyseanf/strava-mcp-server`.
 
-## Step 3: Restart Claude Desktop
+## Step 3: Restart Your MCP Client
 
-1. Quit Claude Desktop completely
+1. Quit the client completely
 2. Reopen it
 3. The MCP server should start automatically
 
@@ -43,6 +43,6 @@ npx -y @r-huijts/strava-mcp-server
 
 You should see: "Starting Strava MCP Server v1.2.1..."
 
-## Step 5: Check Claude Desktop Logs
+## Step 5: Check Client Logs
 
-If it still doesn't work, check Claude Desktop's developer console for error messages.
+If it still doesn't work, check the client developer console for error messages.

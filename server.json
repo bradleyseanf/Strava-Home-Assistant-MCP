@@ -1,10 +1,10 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-07-09/server.schema.json",
-  "name": "io.github.bradleyseanf/strava-mcp",
-  "description": "Legacy stdio MCP metadata for the Strava fork; production uses the remote ChatGPT Custom App server.",
+  "name": "com.rhuijts/strava-mcp",
+  "description": "Metadata for the Strava fork; production uses the remote ChatGPT Custom App server.",
   "status": "active",
   "repository": {
-      "url": "https://github.com/bradleyseanf/strava-mcp",
+    "url": "https://github.com/bradleyseanf/strava-mcp",
     "source": "github"
   },
   "version": "1.0.0",
@@ -12,7 +12,7 @@
     {
       "registry_type": "npm",
       "registry_base_url": "https://registry.npmjs.org",
-      "identifier": "@bradleyseanf/strava-mcp-server",
+      "identifier": "@r-huijts/strava-mcp-server",
       "version": "1.2.1",
       "transport": {
         "type": "stdio"
@@ -42,7 +42,7 @@
           "name": "STRAVA_REDIRECT_URI",
           "description": "Optional Strava OAuth redirect URI for the browser connect flow",
           "is_required": false,
-          "format": "string",
+          "format": "string"
         }
       ]
     }

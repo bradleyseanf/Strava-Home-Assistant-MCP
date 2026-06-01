@@ -1,8 +1,8 @@
 {
   "name": "@r-huijts/strava-mcp-server",
   "version": "1.2.1",
-  "description": "Private Strava MCP server for ChatGPT Custom Apps",
-  "mcpName": "com.bradleyseanf.strava-coach",
+  "description": "Strava MCP server rebuilt for ChatGPT Custom Apps",
+  "mcpName": "com.rhuijts.strava-coach",
   "repository": {
     "type": "git", 
     "url": "https://github.com/bradleyseanf/strava-mcp"

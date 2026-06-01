@@ -1,7 +1,6 @@
 # Strava MCP Server
 
-
-It exposes a remote MCP endpoint, protects it with OAuth, stores Strava tokens server-side, and keeps the production URL behind your own domain or tunnel.
+This fork is rebuilt for ChatGPT Custom Apps. It exposes a remote MCP endpoint, protects it with OAuth, stores Strava tokens server-side, and keeps the production URL behind your own domain or tunnel.
 
 ## ChatGPT Custom App Setup
 
