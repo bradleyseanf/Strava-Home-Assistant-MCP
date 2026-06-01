@@ -47,11 +47,31 @@ export const connectStravaTool = {
             }
 
             if (runtime.publicBaseUrl) {
-                const setupUrl = joinUrl(runtime.publicBaseUrl, "/strava/setup").toString();
+                const config = await loadConfig();
+                if (!hasClientCredentials(config)) {
+                    return {
+                        content: [{
+                            type: 'text' as const,
+                            text: `❌ Missing Strava client credentials.\n\nSet STRAVA_CLIENT_ID and STRAVA_CLIENT_SECRET in your .env, then run connect-strava again.`,
+                        }],
+                    };
+                }
+
+                const stravaCallbackPath = joinUrl(runtime.publicBaseUrl, "/strava/callback").toString();
+                const redirectUri = process.env.STRAVA_REDIRECT_URI?.trim() || stravaCallbackPath;
+                const authUrl = new URL("https://www.strava.com/oauth/authorize");
+                authUrl.search = new URLSearchParams({
+                    client_id: config.clientId!,
+                    response_type: "code",
+                    redirect_uri: redirectUri,
+                    approval_prompt: "force",
+                    scope: "profile:read_all,activity:read_all,activity:read,profile:write",
+                }).toString();
+
                 return {
                     content: [{
                         type: 'text' as const,
-                        text: `✅ Open this link in a browser to connect Strava:\n\n${setupUrl}\n\nAfter you authorize Strava, come back here and ask again.`,
+                        text: `✅ Open this Strava authorize link in a browser:\n\n${authUrl.toString()}\n\nAfter you authorize, Strava will redirect to:\n${redirectUri}\n\nIf that redirect URI is already used by Home Assistant, this ChatGPT flow will need a separate Strava app or a shared relay callback that forwards the code here.`,
                     }],
                 };
             }

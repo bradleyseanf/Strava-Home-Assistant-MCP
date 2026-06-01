@@ -1,5 +1,6 @@
 // import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js"; // Removed
 import { listAthleteClubs as fetchClubs } from "../stravaClient.js"; // Renamed import
+import { getStravaAccessToken } from "../config.js";
 
 // Export the tool definition directly
 export const listAthleteClubs = {
@@ -7,7 +8,7 @@ export const listAthleteClubs = {
     description: "Lists the clubs the authenticated athlete is a member of.",
     inputSchema: undefined,
     execute: async () => {
-        const token = process.env.STRAVA_ACCESS_TOKEN;
+        const token = await getStravaAccessToken();
 
         if (!token || token === 'YOUR_STRAVA_ACCESS_TOKEN_HERE') {
             console.error("Missing or placeholder STRAVA_ACCESS_TOKEN in .env");

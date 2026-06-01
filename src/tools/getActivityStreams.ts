@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { stravaApi } from '../stravaClient.js';
+import { getStravaAccessToken } from '../config.js';
 
 // Define stream types available in Strava API
 const STREAM_TYPES = [
@@ -377,7 +378,7 @@ export const getActivityStreamsTool = {
         // the full native resolution (often 'high', ~10000 points), causing slow responses.
         // Callers who need more data should explicitly pass resolution: 'medium' or 'high'.
         const resolution = rawResolution ?? 'low';
-        const token = process.env.STRAVA_ACCESS_TOKEN;
+        const token = await getStravaAccessToken();
         if (!token) {
             return {
                 content: [{ type: 'text' as const, text: '❌ Missing STRAVA_ACCESS_TOKEN in .env' }],

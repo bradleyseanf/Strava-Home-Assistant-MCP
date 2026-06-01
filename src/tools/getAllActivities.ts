@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { getActivitiesPage as fetchActivitiesPage } from "../stravaClient.js";
+import { getStravaAccessToken } from "../config.js";
 
 // Common activity types
 export const ACTIVITY_TYPES = {
@@ -92,7 +93,7 @@ export const getAllActivities = {
     description: "Fetches complete activity history with optional filtering by date range and activity type. Supports pagination to retrieve all activities.",
     inputSchema: GetAllActivitiesInputSchema,
     execute: async (input: GetAllActivitiesInput) => {
-        const token = process.env.STRAVA_ACCESS_TOKEN;
+        const token = await getStravaAccessToken();
         
         if (!token || token === 'YOUR_STRAVA_ACCESS_TOKEN_HERE') {
             console.error("Missing or placeholder STRAVA_ACCESS_TOKEN in .env");

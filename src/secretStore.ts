@@ -198,6 +198,7 @@ export async function updateSecretState(
                         error instanceof Error ? error.message : String(error)
                     }`,
                 );
+                throw error;
             },
         );
     await writeQueue;

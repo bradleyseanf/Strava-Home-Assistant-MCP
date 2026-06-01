@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { getAthleteZones as fetchAthleteZones, StravaAthleteZones } from "../stravaClient.js";
 import { formatDuration } from "../formatters.js";
+import { getStravaAccessToken } from "../config.js";
 
 const name = "get-athlete-zones";
 const description = "Retrieves the authenticated athlete's configured heart rate and power zones.";
@@ -61,7 +62,7 @@ export const getAthleteZonesTool = {
     description: description + "\n\nOutput includes both a formatted summary and the raw JSON data.",
     inputSchema,
     execute: async (_input: GetAthleteZonesInput) => {
-        const token = process.env.STRAVA_ACCESS_TOKEN;
+        const token = await getStravaAccessToken();
 
         if (!token) {
             console.error("Missing STRAVA_ACCESS_TOKEN environment variable.");

@@ -3,6 +3,7 @@ import {
     getAthleteStats as fetchAthleteStats,
     StravaStats
 } from "../stravaClient.js";
+import { getStravaAccessToken } from "../config.js";
 
 const GetAthleteStatsInputSchema = z.object({
     athleteId: z.number().int().positive().describe("The unique identifier of the athlete to fetch stats for. Obtain this ID first by calling the get-athlete-profile tool.")
@@ -80,7 +81,7 @@ export const getAthleteStatsTool = {
     description: "Fetches the activity statistics (recent, YTD, all-time) for a specific athlete using their ID. Requires the athleteId obtained from the get-athlete-profile tool.",
     inputSchema: GetAthleteStatsInputSchema,
     execute: async ({ athleteId }: GetAthleteStatsInput) => {
-        const token = process.env.STRAVA_ACCESS_TOKEN;
+        const token = await getStravaAccessToken();
 
         if (!token) {
              console.error("Missing STRAVA_ACCESS_TOKEN environment variable.");

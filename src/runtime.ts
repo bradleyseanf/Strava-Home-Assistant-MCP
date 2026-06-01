@@ -46,7 +46,7 @@ function normalizeBasePath(basePath: string): string {
 }
 
 function resolveSecretStorePath(rawPath?: string): string {
-    const defaultPath = path.join(os.homedir(), ".config", "strava-mcp", "secrets.enc.json");
+    const defaultPath = path.join(process.cwd(), ".strava", "secrets.enc.json");
     if (!rawPath) {
         return defaultPath;
     }
@@ -55,11 +55,15 @@ function resolveSecretStorePath(rawPath?: string): string {
         ? path.join(os.homedir(), rawPath.slice(1))
         : rawPath;
 
-    if (path.extname(expanded)) {
-        return expanded;
+    const resolved = path.isAbsolute(expanded)
+        ? expanded
+        : path.resolve(process.cwd(), expanded);
+
+    if (path.extname(resolved)) {
+        return resolved;
     }
 
-    return path.join(expanded, "secrets.enc.json");
+    return path.join(resolved, "secrets.enc.json");
 }
 
 export function joinUrl(baseUrl: URL, suffixPath: string): URL {

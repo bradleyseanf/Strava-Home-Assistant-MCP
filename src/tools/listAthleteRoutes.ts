@@ -5,6 +5,7 @@ import {
     StravaRoute,
     // StravaRoute is needed for the formatter
 } from "../stravaClient.js";
+import { getStravaAccessToken } from "../config.js";
 // Remove the imported formatter since we're defining our own locally
 // import { formatRouteSummary } from "../formatters.js";
 
@@ -35,7 +36,7 @@ export const listAthleteRoutesTool = {
     description: "Lists the routes created by the authenticated athlete, with pagination.",
     inputSchema: ListAthleteRoutesInputSchema,
     execute: async ({ page = 1, perPage = 20 }: ListAthleteRoutesInput) => {
-        const token = process.env.STRAVA_ACCESS_TOKEN;
+        const token = await getStravaAccessToken();
         
         if (!token) {
             console.error("Missing STRAVA_ACCESS_TOKEN in .env");

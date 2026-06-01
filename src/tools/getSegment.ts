@@ -5,6 +5,7 @@ import {
     // handleApiError, // Removed unused import
     StravaDetailedSegment // Type needed for formatter
 } from "../stravaClient.js";
+import { getStravaAccessToken } from "../config.js";
 
 // Input schema
 const GetSegmentInputSchema = z.object({
@@ -51,7 +52,7 @@ export const getSegmentTool = {
     description: "Fetches detailed information about a specific segment using its ID.",
     inputSchema: GetSegmentInputSchema,
     execute: async ({ segmentId }: GetSegmentInput) => {
-        const token = process.env.STRAVA_ACCESS_TOKEN;
+        const token = await getStravaAccessToken();
 
         if (!token) {
             console.error("Missing STRAVA_ACCESS_TOKEN environment variable.");

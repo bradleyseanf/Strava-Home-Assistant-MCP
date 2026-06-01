@@ -1,11 +1,12 @@
 import { getAuthenticatedAthlete } from "../stravaClient.js";
+import { getStravaAccessToken } from "../config.js";
 
 export const getAthleteShoesTool = {
     name: "get-athlete-shoes",
     description: "Fetches the authenticated athlete's shoes from Strava, including usage distance and primary flag.",
     inputSchema: undefined,
     execute: async () => {
-        const token = process.env.STRAVA_ACCESS_TOKEN;
+        const token = await getStravaAccessToken();
 
         if (!token || token === 'YOUR_STRAVA_ACCESS_TOKEN_HERE') {
             console.error("Missing or placeholder STRAVA_ACCESS_TOKEN in .env");

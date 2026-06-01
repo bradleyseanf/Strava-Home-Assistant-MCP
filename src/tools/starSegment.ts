@@ -1,6 +1,7 @@
 // import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js"; // Removed
 import { z } from "zod";
 import { starSegment as updateStarStatus } from "../stravaClient.js"; // Renamed import
+import { getStravaAccessToken } from "../config.js";
 
 const StarSegmentInputSchema = z.object({
     segmentId: z.number().int().positive().describe("The unique identifier of the segment to star or unstar."),
@@ -15,7 +16,7 @@ export const starSegment = {
     description: "Stars or unstars a specific segment for the authenticated athlete.",
     inputSchema: StarSegmentInputSchema,
     execute: async ({ segmentId, starred }: StarSegmentInput) => {
-        const token = process.env.STRAVA_ACCESS_TOKEN;
+        const token = await getStravaAccessToken();
 
         if (!token || token === 'YOUR_STRAVA_ACCESS_TOKEN_HERE') {
             console.error("Missing or placeholder STRAVA_ACCESS_TOKEN in .env");

@@ -4,6 +4,7 @@ import {
     exploreSegments as fetchExploreSegments, // Renamed import
     StravaExplorerResponse
 } from "../stravaClient.js";
+import { getStravaAccessToken } from "../config.js";
 
 const ExploreSegmentsInputSchema = z.object({
     bounds: z.string()
@@ -26,7 +27,7 @@ export const exploreSegments = {
     description: "Searches for popular segments within a given geographical area.",
     inputSchema: ExploreSegmentsInputSchema,
     execute: async ({ bounds, activityType, minCat, maxCat }: ExploreSegmentsInput) => {
-        const token = process.env.STRAVA_ACCESS_TOKEN;
+        const token = await getStravaAccessToken();
 
         if (!token || token === 'YOUR_STRAVA_ACCESS_TOKEN_HERE') {
             console.error("Missing or placeholder STRAVA_ACCESS_TOKEN in .env");

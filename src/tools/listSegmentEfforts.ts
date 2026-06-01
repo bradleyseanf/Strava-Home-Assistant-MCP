@@ -6,6 +6,7 @@ import {
     // handleApiError, // Removed unused import
     StravaDetailedSegmentEffort // Type needed for formatter
 } from "../stravaClient.js";
+import { getStravaAccessToken } from "../config.js";
 // We need the formatter, but can't import the full tool. Let's copy it here for now.
 // TODO: Move formatters to a shared utils.ts file
 
@@ -58,7 +59,7 @@ export const listSegmentEffortsTool = {
     description: "Lists the authenticated athlete's efforts on a specific segment, optionally filtering by date.",
     inputSchema: ListSegmentEffortsInputSchema,
     execute: async ({ segmentId, startDateLocal, endDateLocal, perPage }: ListSegmentEffortsInput) => {
-        const token = process.env.STRAVA_ACCESS_TOKEN;
+        const token = await getStravaAccessToken();
 
         if (!token) {
             console.error("Missing STRAVA_ACCESS_TOKEN environment variable.");

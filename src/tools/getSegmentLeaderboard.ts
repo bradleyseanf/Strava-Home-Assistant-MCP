@@ -3,6 +3,7 @@ import {
     getSegmentLeaderboard as fetchSegmentLeaderboard,
     StravaLeaderboardResponse
 } from '../stravaClient.js';
+import { getStravaAccessToken } from '../config.js';
 
 export const inputSchema = z.object({
     segmentId: z.number().int().positive().describe(
@@ -81,7 +82,7 @@ export const getSegmentLeaderboardTool = {
         '- Check if you have a chance at a top position',
     inputSchema,
     execute: async ({ segmentId, gender, age_group, weight_class, following = false, club_id, date_range, per_page = 10, page = 1 }: GetSegmentLeaderboardParams) => {
-        const token = process.env.STRAVA_ACCESS_TOKEN;
+        const token = await getStravaAccessToken();
 
         if (!token) {
             console.error("Missing STRAVA_ACCESS_TOKEN environment variable.");

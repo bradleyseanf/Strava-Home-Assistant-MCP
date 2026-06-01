@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { getActivityLaps as getActivityLapsClient } from "../stravaClient.js";
+import { getStravaAccessToken } from "../config.js";
 import { formatDuration } from "../formatters.js";
 
 const name = "get-activity-laps";
@@ -45,7 +46,7 @@ export const getActivityLapsTool = {
     description,
     inputSchema,
     execute: async ({ id }: GetActivityLapsInput) => {
-        const token = process.env.STRAVA_ACCESS_TOKEN;
+        const token = await getStravaAccessToken();
 
         if (!token) {
             console.error("Missing STRAVA_ACCESS_TOKEN environment variable.");

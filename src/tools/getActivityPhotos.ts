@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { getActivityPhotos as getActivityPhotosClient } from "../stravaClient.js";
+import { getStravaAccessToken } from "../config.js";
 
 const name = "get-activity-photos";
 
@@ -44,7 +45,7 @@ export const getActivityPhotosTool = {
     description,
     inputSchema,
     execute: async ({ id, size }: GetActivityPhotosInput) => {
-        const token = process.env.STRAVA_ACCESS_TOKEN;
+        const token = await getStravaAccessToken();
 
         if (!token) {
             console.error("Missing STRAVA_ACCESS_TOKEN environment variable.");

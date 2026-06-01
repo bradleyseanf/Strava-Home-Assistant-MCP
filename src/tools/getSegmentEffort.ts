@@ -5,6 +5,7 @@ import {
     StravaDetailedSegmentEffort,
     getSegmentEffort as fetchSegmentEffort,
 } from "../stravaClient.js";
+import { getStravaAccessToken } from "../config.js";
 // import { formatDuration } from "../server.js"; // Removed, now local
 
 const GetSegmentEffortInputSchema = z.object({
@@ -67,7 +68,7 @@ export const getSegmentEffortTool = {
     description: "Fetches detailed information about a specific segment effort using its ID.",
     inputSchema: GetSegmentEffortInputSchema,
     execute: async ({ effortId }: GetSegmentEffortInput) => {
-        const token = process.env.STRAVA_ACCESS_TOKEN;
+        const token = await getStravaAccessToken();
 
         if (!token) {
             console.error("Missing STRAVA_ACCESS_TOKEN environment variable.");

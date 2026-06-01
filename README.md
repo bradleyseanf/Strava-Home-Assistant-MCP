@@ -30,7 +30,7 @@ https://your-random-subdomain.example.com/mcp
 
 - `NODE_ENV=production`
 - `PUBLIC_BASE_URL=https://your-random-subdomain.example.com`
-- `MCP_SECRET_PATH=/var/lib/strava-coach/secrets.enc.json`
+- `MCP_SECRET_PATH=.strava`
 - `SESSION_SECRET=<long-random-session-secret>`
 - `TOKEN_ENCRYPTION_KEY=<long-random-encryption-key>`
 - `ALLOWED_USER_EMAIL=<your-email>`
@@ -46,15 +46,11 @@ Use `STRAVA_REDIRECT_URI` when your Strava app is configured with a public callb
 
 ## Connecting Strava
 
-After the ChatGPT app is connected, open:
+After the ChatGPT app is connected, ask ChatGPT to run the `connect-strava` tool. If your `.env` already contains `STRAVA_CLIENT_ID` and `STRAVA_CLIENT_SECRET`, the server will return a direct Strava authorize link.
 
-```text
-https://your-random-subdomain.example.com/strava/setup
-```
+That authorize link sends you to `https://www.strava.com/oauth/authorize`, you approve the scopes, and Strava redirects back to your configured callback URI. The server saves the refresh token encrypted and uses it for future requests.
 
-or ask ChatGPT to run the `connect-strava` tool. The remote server will return the same browser link.
-
-That page lets you enter your Strava Client ID and Client Secret once, then sends you through Strava's browser consent flow. The server saves the refresh token encrypted and uses it for future requests.
+If you want to keep Home Assistant on the same Strava app, note that a single Strava application only has one callback URI. For ChatGPT to finish its own Strava exchange, you need either a separate Strava app or a shared callback relay that forwards the code to the right backend.
 
 ## Commands
 
@@ -76,7 +72,7 @@ That page lets you enter your Strava Client ID and Client Secret once, then send
 - Run the server on your on-prem host.
 - Put Cloudflare Tunnel or another reverse proxy in front of the app.
 - Keep `PUBLIC_BASE_URL` pointed at the buried subdomain so it does not share the main marketing site route tree.
-- Keep `MCP_SECRET_PATH` outside the repository on persistent storage.
+- Keep `MCP_SECRET_PATH` pointed at `.strava` for the single-folder local setup, or use an absolute path if you want the secret store elsewhere on the server.
 - Do not expose the MCP endpoint without OAuth in front of it.
 - Run `npm run security-check` before connecting ChatGPT to the live URL.
 

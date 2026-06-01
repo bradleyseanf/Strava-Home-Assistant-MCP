@@ -1,6 +1,7 @@
 import { z } from "zod";
 import { getRouteById /*, handleApiError */ } from "../stravaClient.js"; // Removed handleApiError import
 import { formatRouteSummary } from "../formatters.js"; // Import shared formatter
+import { getStravaAccessToken } from "../config.js";
 
 // Zod schema for input validation
 const GetRouteInputSchema = z.object({
@@ -18,7 +19,7 @@ export const getRouteTool = {
     inputSchema: GetRouteInputSchema,
     execute: async (input: GetRouteInput) => {
         const { routeId } = input;
-        const token = process.env.STRAVA_ACCESS_TOKEN;
+        const token = await getStravaAccessToken();
 
         if (!token) {
             console.error("Missing STRAVA_ACCESS_TOKEN environment variable.");

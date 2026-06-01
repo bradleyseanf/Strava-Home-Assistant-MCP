@@ -38,6 +38,11 @@ export async function loadConfig(): Promise<StravaConfig> {
     return mergeConfig(storedState.strava, runtime);
 }
 
+export async function getStravaAccessToken(): Promise<string | undefined> {
+    const config = await loadConfig();
+    return normalizeOptionalString(config.accessToken);
+}
+
 export async function saveConfig(config: StravaConfig): Promise<void> {
     await updateSecretState((state) => {
         if (config.clientId !== undefined) {

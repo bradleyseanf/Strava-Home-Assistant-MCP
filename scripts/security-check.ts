@@ -60,9 +60,10 @@ async function main(): Promise<void> {
     });
 
     const secretStorePath = path.resolve(runtime.secretStorePath);
+    const localSecretStoreRoot = path.resolve(repoRoot, ".strava");
     results.push({
-        name: "Secret store is outside repo",
-        passed: !secretStorePath.startsWith(path.resolve(repoRoot)),
+        name: "Secret store path is allowed",
+        passed: secretStorePath.startsWith(localSecretStoreRoot) || !secretStorePath.startsWith(path.resolve(repoRoot)),
         details: secretStorePath,
     });
 
