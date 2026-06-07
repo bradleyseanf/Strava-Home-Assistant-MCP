@@ -8,14 +8,12 @@ import {
   previewActivity,
   summarizeRunningRows,
 } from "./analytics.js";
-import {
-  readActivityById,
-  readRecentActivities,
-  readRunActivitiesSince,
-  searchActivities,
-  withDatabase,
-  type StravaActivity,
-  type StravaActivityPreview,
+import type {
+  ActivityQueryOptions,
+  SearchQueryOptions,
+  StravaActivity,
+  StravaActivityPreview,
+  StravaActivityStore,
 } from "./database.js";
 
 type ToolResponse = {
@@ -24,7 +22,7 @@ type ToolResponse = {
 };
 
 type ToolDefinition = {
-  dbPath: string;
+  store: StravaActivityStore;
 };
 
 const recentActivitiesInput = z.object({
@@ -69,21 +67,27 @@ function toPreviewList(rows: StravaActivity[]): StravaActivityPreview[] {
   return rows.map(previewActivity);
 }
 
+async function queryRecentActivities(store: StravaActivityStore, options: ActivityQueryOptions): Promise<StravaActivity[]> {
+  return store.readRecentActivities(options);
+}
+
+async function querySearchActivities(store: StravaActivityStore, options: SearchQueryOptions): Promise<StravaActivity[]> {
+  return store.searchActivities(options);
+}
+
 export function registerStravaTools(server: McpServer, options: ToolDefinition): void {
   server.registerTool(
     "get_recent_activities",
     {
       title: "Get Recent Activities",
-      description: "Return recent Strava activities from the local SQLite database.",
+      description: "Return recent Strava activities from the configured SQLite source.",
       inputSchema: recentActivitiesInput,
     },
     async ({ sport_type, limit: count }): Promise<ToolResponse> => {
-      const activities = withDatabase(options.dbPath, (db) =>
-        readRecentActivities(db, {
-          sportType: sport_type,
-          limit: limit(count, 200),
-        }),
-      );
+      const activities = await queryRecentActivities(options.store, {
+        sportType: sport_type,
+        limit: limit(count, 200),
+      });
 
       return result({
         count: activities.length,
@@ -102,7 +106,7 @@ export function registerStravaTools(server: McpServer, options: ToolDefinition):
       inputSchema: activityByIdInput,
     },
     async ({ activity_id }): Promise<ToolResponse> => {
-      const activity = withDatabase(options.dbPath, (db) => readActivityById(db, activity_id));
+      const activity = await options.store.readActivityById(activity_id);
 
       if (!activity) {
         return result({
@@ -130,7 +134,7 @@ export function registerStravaTools(server: McpServer, options: ToolDefinition):
       inputSchema: runningSummaryInput,
     },
     async ({ days }): Promise<ToolResponse> => {
-      const rows = withDatabase(options.dbPath, (db) => readRunActivitiesSince(db, new Date(Date.now() - days * 86_400_000).toISOString()));
+      const rows = await options.store.readRunActivitiesSince(new Date(Date.now() - days * 86_400_000).toISOString());
       const summary = summarizeRunningRows(rows);
 
       return result({
@@ -148,7 +152,7 @@ export function registerStravaTools(server: McpServer, options: ToolDefinition):
       inputSchema: weeklyRunningLoadInput,
     },
     async ({ weeks }): Promise<ToolResponse> => {
-      const rows = withDatabase(options.dbPath, (db) => readRunActivitiesSince(db, new Date(Date.now() - weeks * 7 * 86_400_000).toISOString()));
+      const rows = await options.store.readRunActivitiesSince(new Date(Date.now() - weeks * 7 * 86_400_000).toISOString());
       const weekly = groupWeeklyRunningLoad(rows);
 
       return result({
@@ -168,13 +172,11 @@ export function registerStravaTools(server: McpServer, options: ToolDefinition):
       inputSchema: searchActivitiesInput,
     },
     async ({ query, sport_type, limit: count }): Promise<ToolResponse> => {
-      const activities = withDatabase(options.dbPath, (db) =>
-        searchActivities(db, {
-          query,
-          sportType: sport_type,
-          limit: limit(count, 100),
-        }),
-      );
+      const activities = await querySearchActivities(options.store, {
+        query,
+        sportType: sport_type,
+        limit: limit(count, 100),
+      });
 
       return result({
         query,
@@ -195,7 +197,7 @@ export function registerStravaTools(server: McpServer, options: ToolDefinition):
     },
     async ({ days }): Promise<ToolResponse> => {
       const lookbackDays = Math.max(days, 30);
-      const rows = withDatabase(options.dbPath, (db) => readRunActivitiesSince(db, new Date(Date.now() - lookbackDays * 86_400_000).toISOString()));
+      const rows = await options.store.readRunActivitiesSince(new Date(Date.now() - lookbackDays * 86_400_000).toISOString());
       const context = buildTrainingContext(rows, days);
 
       return result(context);

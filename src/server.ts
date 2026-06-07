@@ -4,19 +4,19 @@ import express from "express";
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 
-import { loadConfig } from "./config.js";
-import { withDatabase } from "./database.js";
+import { assertDatabaseConfig, loadConfig } from "./config.js";
+import { createStravaActivityStore } from "./database.js";
 import { registerStravaTools } from "./tools.js";
 
 dotenv.config();
 
-function createMcpServer(dbPath: string): McpServer {
+function createMcpServer(store: Awaited<ReturnType<typeof createStravaActivityStore>>): McpServer {
   const server = new McpServer({
     name: "strava-home-assistant-mcp",
     version: process.env.npm_package_version ?? "0.1.0",
   });
 
-  registerStravaTools(server, { dbPath });
+  registerStravaTools(server, { store });
   return server;
 }
 
@@ -44,10 +44,9 @@ function bearerAuth(token?: string) {
 
 async function start(): Promise<void> {
   const config = loadConfig();
-
-  withDatabase(config.dbPath, (db) => {
-    db.prepare("SELECT 1").get();
-  });
+  assertDatabaseConfig(config);
+  const store = await createStravaActivityStore(config);
+  await store.ensureReady();
 
   const app = express();
   app.disable("x-powered-by");
@@ -59,13 +58,14 @@ async function start(): Promise<void> {
       version: process.env.npm_package_version ?? "0.1.0",
       health: `http://${config.host}:${config.port}/health`,
       mcp: `http://${config.host}:${config.port}/mcp`,
+      dbMode: config.dbMode,
     });
   });
 
   app.get("/health", (_req, res) => {
     res.json({
       ok: true,
-      mode: "local",
+      mode: config.dbMode,
       host: config.host,
       port: config.port,
       dbPath: config.dbPath,
@@ -74,7 +74,7 @@ async function start(): Promise<void> {
   });
 
   app.all("/mcp", bearerAuth(config.authToken), async (req, res) => {
-    const server = createMcpServer(config.dbPath);
+    const server = createMcpServer(store);
     const transport = new StreamableHTTPServerTransport({
       sessionIdGenerator: undefined,
     });
@@ -136,4 +136,3 @@ async function main(): Promise<void> {
 }
 
 void main();
-

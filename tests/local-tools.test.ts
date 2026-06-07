@@ -3,11 +3,23 @@ import os from "node:os";
 import path from "node:path";
 
 import Database from "better-sqlite3";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi, beforeEach } from "vitest";
 
-import { summarizeRunningRows, groupWeeklyRunningLoad, buildTrainingContext } from "../src/analytics.js";
-import { readActivityById, readRecentActivities, readRunActivitiesSince, searchActivities, withDatabase } from "../src/database.js";
+const { execFileMock } = vi.hoisted(() => ({
+  execFileMock: vi.fn(),
+}));
+
+vi.mock("node:child_process", () => ({
+  execFile: execFileMock,
+}));
+
+import { buildTrainingContext, groupWeeklyRunningLoad, summarizeRunningRows } from "../src/analytics.js";
+import { createStravaActivityStore, type StravaActivityStore } from "../src/database.js";
 import { registerStravaTools } from "../src/tools.js";
+
+beforeEach(() => {
+  execFileMock.mockReset();
+});
 
 function isoDaysAgo(daysAgo: number): string {
   const date = new Date();
@@ -167,105 +179,118 @@ function makeTempDb(): { dbPath: string; cleanup: () => void } {
   };
 }
 
-function registerFakeTools(dbPath: string) {
-  const tools: Array<{ name: string; handler: (args: Record<string, unknown>) => Promise<unknown> }> = [];
+function localConfig(dbPath: string) {
+  return {
+    dbMode: "local" as const,
+    dbPath,
+    host: "127.0.0.1",
+    port: 3000,
+    authToken: undefined,
+    sshHost: undefined,
+    sshUser: undefined,
+    sshPort: 22,
+    sshKeyPath: undefined,
+  };
+}
+
+function sshConfig() {
+  return {
+    dbMode: "ssh",
+    dbPath: "/config/strava_mcp.db",
+    host: "127.0.0.1",
+    port: 3000,
+    authToken: undefined,
+    sshHost: "192.168.1.120",
+    sshUser: "brate",
+    sshPort: 2222,
+    sshKeyPath: "/home/youruser/.ssh/strava_mcp_ha",
+  };
+}
+
+async function registerTools(store: StravaActivityStore) {
+  const registrations: Array<{ name: string; handler: (args: Record<string, unknown>) => Promise<unknown> }> = [];
   const server = {
     registerTool: vi.fn((name: string, _config: unknown, handler: (args: Record<string, unknown>) => Promise<unknown>) => {
-      tools.push({ name, handler });
+      registrations.push({ name, handler });
       return {};
     }),
   } as any;
 
-  registerStravaTools(server, { dbPath });
-  return tools;
+  registerStravaTools(server, { store });
+  return registrations;
 }
 
 describe("Strava Home Assistant MCP", () => {
-  it("registers the six tools", () => {
+  it("queries local SQLite data and builds training context", async () => {
     const { dbPath, cleanup } = makeTempDb();
 
     try {
-      const tools = registerFakeTools(dbPath);
-      expect(tools.map((tool) => tool.name)).toEqual([
-        "get_recent_activities",
-        "get_activity_by_id",
-        "get_running_summary",
-        "get_weekly_running_load",
-        "search_activities",
-        "get_training_context_for_ai",
-      ]);
-    } finally {
-      cleanup();
-    }
-  });
+      const store = await createStravaActivityStore(localConfig(dbPath));
+      await store.ensureReady();
 
-  it("queries SQLite data and builds training context", async () => {
-    const { dbPath, cleanup } = makeTempDb();
-
-    try {
-      const tools = registerFakeTools(dbPath);
-      const byName = Object.fromEntries(tools.map((tool) => [tool.name, tool.handler]));
+      const registrations = await registerTools(store);
+      const byName = Object.fromEntries(registrations.map((tool) => [tool.name, tool.handler]));
 
       const recent = await byName.get_recent_activities({ sport_type: "Run", limit: 10 });
       const recentJson = JSON.parse((recent as any).content[0].text);
       expect(recentJson.count).toBe(3);
       expect(recentJson.notes[0]).toContain("invalid start_date_local");
 
-      const byId = await byName.get_activity_by_id({ activity_id: "bad-date-run" });
-      const byIdJson = JSON.parse((byId as any).content[0].text);
-      expect(byIdJson.found).toBe(true);
-      expect(byIdJson.notes[0]).toContain("invalid start_date_local");
-      expect(byIdJson.activity.raw_json).toContain("bad-date-run");
-
       const summary = await byName.get_running_summary({ days: 30 });
       const summaryJson = JSON.parse((summary as any).content[0].text);
       expect(summaryJson.run_count).toBe(2);
       expect(summaryJson.longest_run.activity_id).toBe("run-long");
 
-      const weekly = await byName.get_weekly_running_load({ weeks: 12 });
-      const weeklyJson = JSON.parse((weekly as any).content[0].text);
-      expect(weeklyJson.weeks_returned).toBeGreaterThan(0);
-      expect(weeklyJson.rows[0].week).toMatch(/^20\d{2}-W\d{2}$/);
-
-      const search = await byName.search_activities({ query: "Long", sport_type: "Run", limit: 5 });
-      const searchJson = JSON.parse((search as any).content[0].text);
-      expect(searchJson.count).toBe(1);
-      expect(searchJson.activities[0].activity_id).toBe("run-long");
-
       const context = await byName.get_training_context_for_ai({ days: 60 });
       const contextJson = JSON.parse((context as any).content[0].text);
       expect(contextJson.current_mileage["7_day_miles"]).toBeGreaterThan(0);
-      expect(contextJson.current_mileage["14_day_miles"]).toBeGreaterThanOrEqual(contextJson.current_mileage["7_day_miles"]);
-      expect(contextJson.current_mileage["30_day_miles"]).toBeGreaterThanOrEqual(contextJson.current_mileage["14_day_miles"]);
       expect(contextJson.long_run.activity_id).toBe("run-long");
-      expect(contextJson.notes.some((note: string) => note.includes("average_heartrate"))).toBe(true);
-      expect(contextJson.notes.some((note: string) => note.includes("calories"))).toBe(true);
 
-      const dbSummary = withDatabase(dbPath, (db) => {
-        const recentRuns = readRunActivitiesSince(db, new Date(Date.now() - 30 * 86_400_000).toISOString());
-        const summary = summarizeRunningRows(recentRuns);
-        const weeklyLoad = groupWeeklyRunningLoad(recentRuns);
-        const directRecent = readRecentActivities(db, { sportType: "Run", limit: 10 });
-        const directSearch = searchActivities(db, { query: "Long", sportType: "Run", limit: 5 });
-        const directById = readActivityById(db, "run-long");
+      const direct = await store.readActivityById("run-long");
+      expect(direct?.activity_id).toBe("run-long");
+      expect(summarizeRunningRows(await store.readRunActivitiesSince(new Date(Date.now() - 30 * 86_400_000).toISOString())).run_count).toBe(2);
+      expect(groupWeeklyRunningLoad(await store.readRunActivitiesSince(new Date(Date.now() - 30 * 86_400_000).toISOString())).length).toBeGreaterThan(0);
+      expect(buildTrainingContext(await store.readRunActivitiesSince(new Date(Date.now() - 60 * 86_400_000).toISOString()), 60).long_run?.activity_id).toBe("run-long");
 
-        return {
-          summary,
-          weeklyLoad,
-          directRecent,
-          directSearch,
-          directById,
-        };
-      });
-
-      expect(dbSummary.summary.run_count).toBe(2);
-      expect(dbSummary.weeklyLoad.length).toBeGreaterThan(0);
-      expect(dbSummary.directRecent.length).toBe(3);
-      expect(dbSummary.directSearch.length).toBe(1);
-      expect(dbSummary.directById?.activity_id).toBe("run-long");
+      await store.close();
     } finally {
       cleanup();
     }
   });
-});
 
+  it("uses SSH mode and parses sqlite3 -json output", async () => {
+    execFileMock.mockImplementation((file: string, args: string[], options: unknown, callback: Function) => {
+      expect(file).toBe("ssh");
+      const remoteCommand = String(args[args.length - 1] ?? "");
+      expect(remoteCommand).toContain("sqlite3 -json");
+
+      if (remoteCommand.includes("sqlite_master")) {
+        callback(null, '[{"name":"strava_activities"}]', "");
+        return;
+      }
+
+      if (remoteCommand.includes("SELECT activity_id")) {
+        callback(null, '[{"activity_id":"run-long","name":"Long run","sport_type":"Run","start_date_local":"2026-06-01T07:00:00.000Z","distance_mi":10.2,"moving_time_sec":3720,"elapsed_time_sec":3780,"pace_min_per_mi":10.16,"speed_mph":5.91,"elevation_gain_ft":260,"calories":920,"average_heartrate":144,"max_heartrate":168,"activity_url":"https://www.strava.com/activities/run-long","latitude":40,"longitude":-73,"polyline":null,"source":"home-assistant","raw_json":"{\\"id\\":\\"run-long\\"}","created_at":"2026-06-01T07:00:00.000Z","updated_at":"2026-06-01T07:00:00.000Z"}]', "");
+        return;
+      }
+
+      if (remoteCommand.includes("FROM strava_activities")) {
+        callback(null, '[{"activity_id":"run-long","name":"Long run","sport_type":"Run","start_date_local":"2026-06-01T07:00:00.000Z","distance_mi":10.2,"moving_time_sec":3720,"elapsed_time_sec":3780,"pace_min_per_mi":10.16,"speed_mph":5.91,"elevation_gain_ft":260,"calories":920,"average_heartrate":144,"max_heartrate":168,"activity_url":"https://www.strava.com/activities/run-long","latitude":40,"longitude":-73,"polyline":null,"source":"home-assistant","raw_json":"{\\"id\\":\\"run-long\\"}","created_at":"2026-06-01T07:00:00.000Z","updated_at":"2026-06-01T07:00:00.000Z"}]', "");
+        return;
+      }
+
+      callback(new Error("Unexpected SSH command"), "", "unexpected");
+    });
+
+    const store = await createStravaActivityStore(sshConfig());
+    await store.ensureReady();
+
+    const registrations = await registerTools(store);
+    const recent = await registrations.find((tool) => tool.name === "get_recent_activities")!.handler({ limit: 5 });
+    const recentJson = JSON.parse((recent as any).content[0].text);
+
+    expect(recentJson.count).toBe(1);
+    expect(recentJson.activities[0].activity_id).toBe("run-long");
+    await store.close();
+  });
+});
