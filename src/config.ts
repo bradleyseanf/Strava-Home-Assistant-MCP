@@ -1,114 +1,34 @@
-import { loadRuntimeConfig } from "./runtime.js";
-import {
-    getSecretStorePath,
-    loadSecretState,
-    updateSecretState,
-} from "./secretStore.js";
+import os from "node:os";
+import path from "node:path";
+import { z } from "zod";
 
-export interface StravaConfig {
-    clientId?: string;
-    clientSecret?: string;
-    accessToken?: string;
-    refreshToken?: string;
-    expiresAt?: number;
+const envSchema = z.object({
+  STRAVA_DB_PATH: z.string().trim().min(1).default("/data/strava_mcp.db"),
+  MCP_HOST: z.string().trim().min(1).default("127.0.0.1"),
+  MCP_PORT: z.coerce.number().int().min(1).max(65535).default(3000),
+  MCP_AUTH_TOKEN: z.string().trim().min(1).optional(),
+});
+
+export type RuntimeConfig = {
+  dbPath: string;
+  host: string;
+  port: number;
+  authToken?: string;
+};
+
+function resolvePath(rawPath: string): string {
+  const expanded = rawPath.startsWith("~") ? path.join(os.homedir(), rawPath.slice(1)) : rawPath;
+  return path.isAbsolute(expanded) ? expanded : path.resolve(process.cwd(), expanded);
 }
 
-function normalizeOptionalString(value?: string): string | undefined {
-    const trimmed = value?.trim();
-    return trimmed ? trimmed : undefined;
+export function loadConfig(env: NodeJS.ProcessEnv = process.env): RuntimeConfig {
+  const parsed = envSchema.parse(env);
+
+  return {
+    dbPath: resolvePath(parsed.STRAVA_DB_PATH),
+    host: parsed.MCP_HOST,
+    port: parsed.MCP_PORT,
+    authToken: parsed.MCP_AUTH_TOKEN,
+  };
 }
 
-function mergeConfig(
-    stored: StravaConfig,
-    env: ReturnType<typeof loadRuntimeConfig>,
-): StravaConfig {
-    return {
-        clientId: stored.clientId ?? normalizeOptionalString(env.stravaClientId),
-        clientSecret: stored.clientSecret ?? normalizeOptionalString(env.stravaClientSecret),
-        accessToken: stored.accessToken ?? normalizeOptionalString(env.stravaAccessToken),
-        refreshToken: stored.refreshToken ?? normalizeOptionalString(env.stravaRefreshToken),
-        expiresAt: stored.expiresAt,
-    };
-}
-
-export async function loadConfig(): Promise<StravaConfig> {
-    const storedState = await loadSecretState();
-    const runtime = loadRuntimeConfig();
-
-    return mergeConfig(storedState.strava, runtime);
-}
-
-export async function getStravaAccessToken(): Promise<string | undefined> {
-    const config = await loadConfig();
-    return normalizeOptionalString(config.accessToken);
-}
-
-export async function saveConfig(config: StravaConfig): Promise<void> {
-    await updateSecretState((state) => {
-        if (config.clientId !== undefined) {
-            state.strava.clientId = config.clientId;
-        }
-        if (config.clientSecret !== undefined) {
-            state.strava.clientSecret = config.clientSecret;
-        }
-        if (config.accessToken !== undefined) {
-            state.strava.accessToken = config.accessToken;
-        }
-        if (config.refreshToken !== undefined) {
-            state.strava.refreshToken = config.refreshToken;
-        }
-        if (config.expiresAt !== undefined) {
-            state.strava.expiresAt = config.expiresAt;
-        }
-    });
-}
-
-export async function updateTokens(
-    accessToken: string,
-    refreshToken: string,
-    expiresAt?: number,
-): Promise<void> {
-    process.env.STRAVA_ACCESS_TOKEN = accessToken;
-    process.env.STRAVA_REFRESH_TOKEN = refreshToken;
-
-    await saveConfig({
-        accessToken,
-        refreshToken,
-        expiresAt,
-    });
-}
-
-export async function saveClientCredentials(
-    clientId: string,
-    clientSecret: string,
-): Promise<void> {
-    await saveConfig({
-        clientId,
-        clientSecret,
-    });
-}
-
-export function hasClientCredentials(config: StravaConfig): boolean {
-    return !!(config.clientId && config.clientSecret);
-}
-
-export function hasValidTokens(config: StravaConfig): boolean {
-    return !!(config.accessToken && config.refreshToken);
-}
-
-export function getConfigPath(): string {
-    return getSecretStorePath();
-}
-
-export async function clearConfig(): Promise<void> {
-    await updateSecretState((state) => {
-        state.strava = {};
-    });
-}
-
-export async function clearClientCredentials(): Promise<void> {
-    await updateSecretState((state) => {
-        delete state.strava.clientId;
-        delete state.strava.clientSecret;
-    });
-}

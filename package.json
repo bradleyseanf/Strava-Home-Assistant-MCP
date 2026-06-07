@@ -1,22 +1,16 @@
 {
-  "name": "@r-huijts/strava-mcp-server",
-  "version": "1.2.1",
-  "description": "Strava MCP server rebuilt for ChatGPT Custom Apps",
-  "mcpName": "com.rhuijts.strava-coach",
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/bradleyseanf/strava-mcp"
-  },
+  "name": "strava-home-assistant-mcp",
+  "version": "0.1.0",
+  "description": "Local/on-prem MCP server for Strava activity data stored in a Home Assistant SQLite database",
   "main": "dist/server.js",
   "bin": {
-    "strava-mcp-server": "./dist/server.js"
+    "strava-home-assistant-mcp": "./dist/server.js"
   },
   "type": "module",
   "files": [
     "dist",
-    "scripts",
     "README.md",
-    "LICENSE"
+    ".env.example"
   ],
   "engines": {
     "node": ">=18.0.0"
@@ -25,42 +19,28 @@
     "build": "tsc",
     "start": "node dist/server.js",
     "dev": "tsx src/server.ts",
-    "lint": "eslint . --ext .ts",
-    "setup-auth": "tsx scripts/setup-auth.ts",
-    "reset-strava": "tsx scripts/reset-strava.ts",
     "test": "vitest run",
-    "test:api": "RUN_API_TESTS=true vitest run tests/getActivityStreams.api.test.ts",
-    "test:mcp": "tsx scripts/test-mcp-endpoint.ts",
-    "security-check": "tsx scripts/security-check.ts",
     "prepublishOnly": "npm run build"
   },
   "keywords": [
     "mcp",
     "strava",
-    "llm",
-    "ai"
+    "sqlite",
+    "home-assistant",
+    "local"
   ],
-  "author": "",
   "license": "ISC",
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.29.0",
-    "axios": "^1.6.0",
-    "cookie-parser": "^1.4.7",
+    "better-sqlite3": "^11.10.0",
     "dotenv": "^16.3.0",
     "express": "^4.21.2",
-    "express-rate-limit": "^7.5.0",
-    "helmet": "^8.0.0",
-    "open": "^10.1.0",
     "zod": "^3.22.0"
   },
   "devDependencies": {
-    "@types/cookie-parser": "^1.4.8",
+    "@types/better-sqlite3": "^7.6.13",
     "@types/express": "^5.0.1",
     "@types/node": "^20.11.0",
-    "@typescript-eslint/eslint-plugin": "^8.60.0",
-    "@typescript-eslint/parser": "^8.60.0",
-    "eslint": "^8.56.0",
-    "ts-node": "^10.9.0",
     "tsx": "^4.7.0",
     "typescript": "^5.3.0",
     "vitest": "^4.1.7"
